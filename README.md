@@ -1,1 +1,1 @@
-# PlutoVideoSnapshoterWebsite
+Please visit https://pluto.shootsoft.net
