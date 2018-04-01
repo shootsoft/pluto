@@ -1,1 +1,1 @@
-Please visit https://pluto.shootsoft.net
+Please visit http://pluto.shootsoft.net
