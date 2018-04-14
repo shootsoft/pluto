@@ -1,17 +1,26 @@
 #!/usr/bin/env python
 import json
-import urllib2
+import logging
 
+import cloudstorage
 import jinja2
 import os
 import webapp2
-from google.appengine.api import memcache
+from google.appengine.api import memcache, urlfetch, app_identity
 
 JINJA_ENVIRONMENT = jinja2.Environment(
     loader=jinja2.FileSystemLoader(os.path.dirname(__file__)),
     extensions=['jinja2.ext.autoescape'],
     autoescape=True)
 
+# [START retries]
+cloudstorage.set_default_retry_params(
+    cloudstorage.RetryParams(
+        initial_delay=0.2, max_delay=5.0, backoff_factor=2, max_retry_period=15
+    ))
+
+
+# [END retries]
 
 # [END imports]
 
@@ -24,10 +33,14 @@ class MainHandler(webapp2.RequestHandler):
         client = memcache.Client()
         info = client.gets("release-info")
         if not info:
-            contents = urllib2.urlopen(
-                "https://api.github.com/repos/shootsoft/PlutoVideoSnapshoter/releases/latest").read()
-            info = self.parse(contents)
-            client.set("release-info", info, 3600 * 24 * 30)
+            result = urlfetch.fetch(self.get_github_url())
+            if result.status_code == 200:
+                info = self.parse(result.content)
+                client.set("release-info", info, 3600 * 24 * 30)
+            else:
+                logging.error(result.status_code)
+        if not info:
+            info = {}
         return info
 
     def parse(self, contents):
@@ -57,6 +70,12 @@ class MainHandler(webapp2.RequestHandler):
 
     def get_megabyte(self, bytes):
         return str(int(round(float(bytes) / 1024 / 1024))) + " MB"
+
+    def get_github_url(self):
+        bucket_name = os.environ.get(
+            'BUCKET_NAME', app_identity.get_default_gcs_bucket_name())
+        with cloudstorage.open("/" + bucket_name + "/token/github.aip.token") as sfile:
+            return "https://api.github.com/repos/shootsoft/PlutoVideoSnapshoter/releases/latest?access_token=" + sfile.readline()
 
 
 app = webapp2.WSGIApplication([
